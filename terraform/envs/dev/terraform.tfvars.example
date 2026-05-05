@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars and edit. Do NOT commit terraform.tfvars.
+region            = "us-east-1"
+environment       = "dev"
+name              = "devops-challenge-dev"
+github_repository = "your-org/devops-challenges"
+
+# Override after the first image push:
+# image = "<acct>.dkr.ecr.us-east-1.amazonaws.com/devops-challenge-dev:<sha>"

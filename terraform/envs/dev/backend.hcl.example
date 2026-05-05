@@ -1,0 +1,4 @@
+# Copy to backend.hcl, fill in, then:
+#   terraform init -backend-config=backend.hcl
+bucket = "your-tfstate-bucket-name"
+region = "us-east-1"

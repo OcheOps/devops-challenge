@@ -1,0 +1,74 @@
+# Runs on push to main: build → push to ECR → register new task def → ECS deploy.
+# Auth uses GitHub OIDC (no static AWS keys). The role is created by Terraform.
+name: cd
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# OIDC needs id-token: write at the workflow level.
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: devops-challenge-dev
+  ECS_CLUSTER: devops-challenge-dev
+  ECS_SERVICE: devops-challenge-dev
+  CONTAINER_NAME: app
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & push image
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE_TAG=${GITHUB_SHA::7}
+          IMAGE_URI="${REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+
+          docker build \
+            --build-arg APP_VERSION="${IMAGE_TAG}" \
+            --build-arg GIT_SHA="${GITHUB_SHA}" \
+            -t "${IMAGE_URI}" .
+
+          docker push "${IMAGE_URI}"
+          echo "image=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+
+      - name: Render new task definition
+        id: render
+        run: |
+          # Pull the live task def, swap in the new image, write to file.
+          aws ecs describe-task-definition \
+            --task-definition "${ECS_SERVICE}" \
+            --query 'taskDefinition' > taskdef.json
+
+          jq --arg IMG "${{ steps.build.outputs.image }}" --arg NAME "${CONTAINER_NAME}" '
+            .containerDefinitions |= map(if .name == $NAME then .image = $IMG else . end)
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
+          ' taskdef.json > new-taskdef.json
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: new-taskdef.json
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true

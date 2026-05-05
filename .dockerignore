@@ -1,0 +1,13 @@
+.git
+.github
+.gitignore
+README.md
+docs/
+terraform/
+scripts/
+**/__pycache__
+**/.pytest_cache
+**/.venv
+**/venv
+*.md
+.env*
