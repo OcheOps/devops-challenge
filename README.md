@@ -60,6 +60,15 @@ docs/architecture.md       Mermaid diagram + flow narrative
 
 ## End-to-end deploy
 
+> **Bootstrap order matters.** The CD workflow (`cd.yml`) triggers on every push
+> to `main`, but it can only run after the GitHub secret `AWS_ROLE_TO_ASSUME` is
+> set. That value is produced by `terraform apply` (output:
+> `github_actions_role_arn`). So the very first push to a fresh repo will see
+> the CD job fail with a missing-secret error — that is expected. Run the steps
+> below once, paste the role ARN into repo *Settings → Secrets and variables →
+> Actions → New repository secret* as `AWS_ROLE_TO_ASSUME`, then either push a
+> new commit or re-run the failed `cd` workflow from the Actions tab.
+
 ### 1. Bootstrap the Terraform backend (once per account)
 
 ```bash
